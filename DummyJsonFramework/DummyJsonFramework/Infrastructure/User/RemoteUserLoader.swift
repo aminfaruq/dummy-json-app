@@ -32,24 +32,25 @@ public final class RemoteUserLoader: UserLoader {
         self.client = client
     }
     
-    public func loadUsers(completion: @escaping (UserLoader.Result) -> Void) {
-        client.get(from: url) { [weak self] result in
-            guard self != nil else { return }
-            switch result {
-                case let .success((data, response)):
-                    switch response.statusCode {
-                        case 200:
-                            guard let root = try? JSONDecoder().decode(RemoteUserRootDTO.self, from: data) else {
-                                return completion(.failure(Error.invalidData))
-                            }
-                            return completion(.success(root.users.map({ $0.toModel() })))
-                        default:
-                            completion(.failure(Error.invalidData))
-                    }
-                case .failure:
-                    completion(.failure(Error.connectivity))
+    public func loadUsers() async throws -> [UserModel] {
+        try await withCheckedThrowingContinuation { continuation in
+            client.get(from: url) { result in
+                switch result {
+                    case let .success((data, response)):
+                        switch response.statusCode {
+                            case 200:
+                                guard let root = try? JSONDecoder().decode(RemoteUserRootDTO.self, from: data) else {
+                                    return continuation.resume(throwing: Error.invalidData)
+                                }
+                                continuation.resume(returning: root.users.map({ $0.toModel() }))
+                            default:
+                                continuation.resume(throwing: Error.invalidData)
+                        }
+                    case .failure:
+                        continuation.resume(throwing: Error.connectivity)
+                        
+                }
             }
-            
         }
     }
     
