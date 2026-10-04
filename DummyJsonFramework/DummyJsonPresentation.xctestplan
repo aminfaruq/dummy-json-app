@@ -1,0 +1,35 @@
+{
+  "configurations" : [
+    {
+      "id" : "1EDF8E52-0C29-4596-927E-FB73DCCDB65C",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : {
+      "targets" : [
+        {
+          "containerPath" : "container:DummyJsonFramework.xcodeproj",
+          "identifier" : "83833C4E30721E12008BA787",
+          "name" : "DummyJsonPresentation"
+        }
+      ]
+    },
+    "performanceAntipatternCheckerEnabled" : true,
+    "testExecutionOrdering" : "random"
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:DummyJsonFramework.xcodeproj",
+        "identifier" : "83833C5630721E13008BA787",
+        "name" : "DummyJsonPresentationTests"
+      }
+    }
+  ],
+  "version" : 1
+}
