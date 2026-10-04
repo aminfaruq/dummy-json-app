@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import Combine
 import DummyJsonFramework
 import DummyJsonPresentation
 
@@ -35,7 +34,7 @@ struct ContentView: View {
     }
     
     private var userList: some View {
-        List(viewModel.users, id: \.id) { user in
+        List(viewModel.users) { user in
              VStack(alignment: .leading, spacing: 4) {
                  Text(user.username)
                      .font(.headline)
