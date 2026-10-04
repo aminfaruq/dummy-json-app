@@ -21,7 +21,6 @@ public final class RemoteUserLoader: UserLoader {
                     return "The server returned an unexpected response."
             }
         }
-        
     }
     
     private let url: URL
@@ -33,25 +32,21 @@ public final class RemoteUserLoader: UserLoader {
     }
     
     public func loadUsers() async throws -> [UserModel] {
-        try await withCheckedThrowingContinuation { continuation in
-            client.get(from: url) { result in
-                switch result {
-                    case let .success((data, response)):
-                        switch response.statusCode {
-                            case 200:
-                                guard let root = try? JSONDecoder().decode(RemoteUserRootDTO.self, from: data) else {
-                                    return continuation.resume(throwing: Error.invalidData)
-                                }
-                                continuation.resume(returning: root.users.map({ $0.toModel() }))
-                            default:
-                                continuation.resume(throwing: Error.invalidData)
-                        }
-                    case .failure:
-                        continuation.resume(throwing: Error.connectivity)
-                        
-                }
-            }
+        let data: Data
+        let response: HTTPURLResponse
+        
+        do {
+            (data, response) = try await client.get(from: url)
+        } catch {
+            throw Error.connectivity
         }
+        
+        guard response.statusCode == 200,
+              let root = try? JSONDecoder().decode(RemoteUserRootDTO.self, from: data) else {
+            throw Error.invalidData
+        }
+        
+        return root.users.map { $0.toModel() }
     }
     
     private struct RemoteUserDTO: Decodable {
@@ -67,5 +62,4 @@ public final class RemoteUserLoader: UserLoader {
     private struct RemoteUserRootDTO: Decodable {
         let users: [RemoteUserDTO]
     }
-    
 }
