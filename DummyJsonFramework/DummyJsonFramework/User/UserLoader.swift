@@ -8,7 +8,5 @@
 import Foundation
 
 public protocol UserLoader {
-    typealias Result = Swift.Result<[UserModel], Error>
-    
-    func loadUsers(completion: @escaping (Result) -> Void)
+    func loadUsers() async throws -> [UserModel]
 }
