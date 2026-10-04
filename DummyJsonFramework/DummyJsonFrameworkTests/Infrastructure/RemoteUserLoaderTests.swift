@@ -42,14 +42,7 @@ final class RemoteUserLoaderTests: XCTestCase {
         let (sut, spy) = makeSUT()
         spy.stub(with: .failure(anyNSError()))
         
-        do {
-            _ = try await sut.loadUsers()
-            XCTFail("Expected failure, got success instead")
-        } catch let error as RemoteUserLoader.Error {
-            XCTAssertEqual(error, .connectivity)
-        } catch {
-            XCTFail("Expected RemoteUserLoader.Error, got \(error)")
-        }
+        await assertThat(sut, throws: .connectivity)
     }
     
     func test_loadUsers_deliversInvalidDataOnNon200Status() async {
@@ -59,14 +52,7 @@ final class RemoteUserLoaderTests: XCTestCase {
             let (sut, spy) = makeSUT()
             spy.stub(statusCode: code, data: anyData())
             
-            do {
-                _ = try await sut.loadUsers()
-                XCTFail("Expected failure for status \(code)")
-            } catch let error as RemoteUserLoader.Error {
-                XCTAssertEqual(error, .invalidData)
-            } catch {
-                XCTFail("Expected RemoteUserLoader.Error, got \(error)")
-            }
+            await assertThat(sut, throws: .invalidData)
         }
     }
     
@@ -75,14 +61,7 @@ final class RemoteUserLoaderTests: XCTestCase {
         
         spy.stub(statusCode: 200, data: Data("invalid json".utf8))
         
-        do {
-            _ = try await sut.loadUsers()
-            XCTFail("Expected invalidData error, got success instead")
-        } catch let error as RemoteUserLoader.Error {
-            XCTAssertEqual(error, .invalidData)
-        } catch {
-            XCTFail("Expected RemoteUserLoader.Error, got \(error) instead")
-        }
+        await assertThat(sut, throws: .invalidData)
     }
     
     
@@ -122,6 +101,22 @@ final class RemoteUserLoaderTests: XCTestCase {
         trackForMemoryLeaks(sut, file: file, line: line)
         trackForMemoryLeaks(spy, file: file, line: line)
         return (sut, spy)
+    }
+    
+    private func assertThat(
+        _ sut: RemoteUserLoader,
+        throws expectedError: RemoteUserLoader.Error,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        do {
+            _ = try await sut.loadUsers()
+            XCTFail("Expected \(expectedError), got success instead", file: file, line: line)
+        } catch let error as RemoteUserLoader.Error {
+            XCTAssertEqual(error, expectedError, file: file, line: line)
+        } catch {
+            XCTFail("Expected \(expectedError), got \(error) instead", file: file, line: line)
+        }
     }
     
     private func makeUser(
