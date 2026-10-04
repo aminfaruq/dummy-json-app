@@ -13,11 +13,14 @@ final class RemoteUserLoader {
     
     public enum Error: Swift.Error, LocalizedError, Equatable {
         case connectivity
+        case invalidData
         
         public var errorDescription: String? {
             switch self {
                 case .connectivity:
                     return "Cannot connect to the server. Check your internet connection."
+                case .invalidData:
+                    return "The server returned an unexpected response."
             }
         }
         
@@ -32,8 +35,14 @@ final class RemoteUserLoader {
     }
     
     func loadUsers(completion: @escaping (UserLoader.Result) -> Void) {
-        client.get(from: baseURL) { _ in
-            completion(.failure(Error.connectivity))
+        client.get(from: baseURL) { result in
+            switch result {
+                case .success:
+                    completion(.failure(Error.invalidData))
+                case .failure:
+                    completion(.failure(Error.connectivity))
+            }
+           
         }
     }
 }
@@ -72,6 +81,17 @@ final class RemoteUserLoaderTests: XCTestCase {
         expect(sut, toCompleteWith: failure(.connectivity), when: {
             spy.complete(with: clientError)
         })
+    }
+    
+    func test_load_deliversInvalidDataOnNon200Status() {
+        let samples = [199, 201, 300, 400, 500]
+        
+        samples.forEach { code in
+            let (sut, spy) = makeSUT()
+            expect(sut, toCompleteWith: failure(.invalidData), when: {
+                spy.complete(withStatusCode: code, data: anyData())
+            })
+        }
     }
     
     
@@ -138,6 +158,19 @@ final class RemoteUserLoaderTests: XCTestCase {
         
         func complete(with error: Error, at index: Int = 0) {
             completions[index].completion(.failure(error))
+        }
+        
+        func complete(
+            withStatusCode code: Int,
+            data: Data,
+            at index: Int = 0
+        ) {
+            let response = HTTPURLResponse(
+                url: completions[index].url,
+                statusCode: code,
+                httpVersion: nil,
+                headerFields: nil)!
+            completions[index].completion(.success((data, response)))
         }
         
         private struct Task: HTTPClientTask {
