@@ -7,7 +7,7 @@
 
 import Foundation
 
-public struct UserModel : Equatable {
+public struct UserModel: Identifiable, Equatable {
     public let id: Int
     public let username: String
     public let email: String
