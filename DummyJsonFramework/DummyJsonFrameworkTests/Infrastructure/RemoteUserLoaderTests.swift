@@ -92,7 +92,7 @@ final class RemoteUserLoaderTests: XCTestCase {
         let client = HTTPClientSpy()
         var sut: RemoteUserLoader? = RemoteUserLoader(url: anyURL(), client: client)
         
-        var receivedResults = [UserLoader.Result]()
+        var receivedResults = [RemoteUserLoader.Result]()
         
         sut?.loadUsers { receivedResults.append($0) }
         
@@ -136,13 +136,13 @@ final class RemoteUserLoaderTests: XCTestCase {
         return try! JSONSerialization.data(withJSONObject: json)
     }
     
-    private func failure(_ error: RemoteUserLoader.Error) -> UserLoader.Result {
+    private func failure(_ error: RemoteUserLoader.Error) -> RemoteUserLoader.Result {
         .failure(error)
     }
     
     private func expect(
         _ sut: RemoteUserLoader,
-        toCompleteWith expectedResult: UserLoader.Result,
+        toCompleteWith expectedResult: RemoteUserLoader.Result,
         when action: () -> Void,
         file: StaticString = #filePath,
         line: UInt = #line
