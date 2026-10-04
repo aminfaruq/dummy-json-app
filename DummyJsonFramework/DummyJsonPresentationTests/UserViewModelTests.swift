@@ -9,8 +9,9 @@ import XCTest
 import DummyJsonFramework
 import DummyJsonPresentation
 
-final class UserViewModelTests : XCTestCase {
+final class UserViewModelTests: XCTestCase {
     
+    @MainActor
     func test_init_hasEmptyUsersAndNotLoading() {
         let (sut, _) = makeSUT()
         
@@ -19,68 +20,62 @@ final class UserViewModelTests : XCTestCase {
         XCTAssertNil(sut.errorMessage)
     }
     
-    func test_load_setsIsLoading() {
-        let (sut, _) = makeSUT()
-        
-        sut.load()
-        
-        XCTAssertTrue(sut.isLoading)
-    }
-    
-    func test_load_requestUsersFromLoader() {
+    @MainActor
+    func test_load_requestsUsersFromLoader() async {
         let (sut, spy) = makeSUT()
         XCTAssertEqual(spy.loadCallCount, 0)
         
-        sut.load()
-        XCTAssertEqual(spy.loadCallCount,  1)
+        await sut.load()
+        XCTAssertEqual(spy.loadCallCount, 1)
         
-        sut.load()
+        await sut.load()
         XCTAssertEqual(spy.loadCallCount, 2)
     }
     
-    func test_load_updatesLoadingStateCorrectly() {
+    @MainActor
+    func test_load_updatesLoadingStateCorrectly() async {
         let (sut, spy) = makeSUT()
         
-        sut.load()
-        XCTAssertTrue(sut.isLoading)
+        spy.onLoad = { [weak sut] in
+            XCTAssertTrue(sut?.isLoading == true, "Expected isLoading to be true while request is in flight")
+        }
         
-        spy.complete(at: 0)
-        XCTAssertFalse(sut.isLoading)
-        
-        sut.load()
-        XCTAssertTrue(sut.isLoading)
-
-        spy.complete(withError: anyNSError(), at: 1)
-        XCTAssertFalse(sut.isLoading)
+        await sut.load()
+        XCTAssertFalse(sut.isLoading, "Expected isLoading to be false after request completes")
     }
     
-    func test_load_deliversErrorMessageOnFailure() {
+    @MainActor
+    func test_load_deliversUsersOnSuccess() async {
         let (sut, spy) = makeSUT()
-        
-        sut.load()
-        spy.complete(withError: anyNSError())
-        
-        XCTAssertTrue(sut.users.isEmpty)
-        XCTAssertNotNil(sut.errorMessage)
-    }
-    
-    func test_load_deliversUsersOnSuccess() {
-        let (sut, spy) = makeSUT()
-        
         let expectedUsers = [
             UserModel(id: 1, username: "amin", email: "amin@test.com"),
             UserModel(id: 2, username: "faruq", email: "faruq@test.com")
         ]
+        spy.stub(with: expectedUsers)
         
-        sut.load()
-        spy.complete(with: expectedUsers)
+        await sut.load()
         
         XCTAssertEqual(sut.users, expectedUsers)
         XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+    
+    @MainActor
+    func test_load_deliversErrorMessageOnFailure() async {
+        let (sut, spy) = makeSUT()
+        let error = anyNSError()
+        spy.stub(with: error)
+        
+        await sut.load()
+        
+        XCTAssertTrue(sut.users.isEmpty)
+        XCTAssertEqual(sut.errorMessage, error.localizedDescription)
+        XCTAssertFalse(sut.isLoading)
     }
     
     // MARK: - Helpers
     
+    @MainActor
     private func makeSUT(
         file: StaticString = #filePath,
         line: UInt = #line
@@ -93,23 +88,22 @@ final class UserViewModelTests : XCTestCase {
     }
     
     private class UserLoaderSpy: UserLoader {
-        private var completions = [(UserLoader.Result) -> Void]()
+        private(set) var loadCallCount = 0
+        private var stub: Result<[UserModel], Error>?
+        var onLoad: (() -> Void)?
         
-        var loadCallCount: Int {
-            completions.count
+        func stub(with users: [UserModel]) {
+            self.stub = .success(users)
         }
         
-        func loadUsers(completion: @escaping (UserLoader.Result) -> Void) {
-            completions.append(completion)
+        func stub(with error: Error) {
+            self.stub = .failure(error)
         }
         
-        func complete(with users: [UserModel] = [], at index: Int = 0) {
-            completions[index](.success(users))
-        }
-        
-        func complete(withError error: Error, at index: Int = 0) {
-            completions[index](.failure(error))
+        func loadUsers() async throws -> [UserModel] {
+            loadCallCount += 1
+            onLoad?()
+            return try stub?.get() ?? []
         }
     }
-    
 }
