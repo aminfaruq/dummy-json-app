@@ -29,10 +29,10 @@ final class UserViewModel {
             self.isLoading = false
             
             switch result {
+                case .success(let users):
+                    self.users = users
                 case .failure(let error):
                     self.errorMessage = error.localizedDescription
-                default:
-                    break
             }
         }
     }
@@ -92,6 +92,21 @@ final class UserViewModelTests : XCTestCase {
         
         XCTAssertTrue(sut.users.isEmpty)
         XCTAssertNotNil(sut.errorMessage)
+    }
+    
+    func test_load_deliversUsersOnSuccess() {
+        let (sut, spy) = makeSUT()
+        
+        let expectedUsers = [
+            UserModel(id: 1, username: "amin", email: "amin@test.com"),
+            UserModel(id: 2, username: "faruq", email: "faruq@test.com")
+        ]
+        
+        sut.load()
+        spy.complete(with: expectedUsers)
+        
+        XCTAssertEqual(sut.users, expectedUsers)
+        XCTAssertNil(sut.errorMessage)
     }
     
     // MARK: - Helpers
