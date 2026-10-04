@@ -8,9 +8,9 @@
 import Foundation
 
 public struct UserModel : Equatable {
-    let id: Int
-    let username: String
-    let email: String
+    public let id: Int
+    public let username: String
+    public let email: String
     
     public init(id: Int, username: String, email: String) {
         self.id = id
