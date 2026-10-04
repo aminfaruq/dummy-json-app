@@ -14,10 +14,10 @@ final class RemoteUserLoaderTests: XCTestCase {
     func test_init_doesNotRequestDataFromURL() {
         let (_, client) = makeSUT()
         
-        XCTAssertTrue(client.receivedMessages.isEmpty)
+        XCTAssertTrue(client.requestedURLs.isEmpty)
     }
     
-    func test_loadUsers_requestDataFromURL() async {
+    func test_loadUsers_requestsDataFromURL() async {
         let url = anyURL()
         let (sut, spy) = makeSUT(baseURL: url)
         spy.stub(with: .failure(anyNSError()))
@@ -27,7 +27,7 @@ final class RemoteUserLoaderTests: XCTestCase {
         XCTAssertEqual(spy.requestedURLs, [url])
     }
     
-    func test_loadUsers_requestDataFromURLTwice() async {
+    func test_loadUsers_requestsDataFromURLTwice() async {
         let url = anyURL()
         let (sut, spy) = makeSUT(baseURL: url)
         spy.stub(with: .failure(anyNSError()))
@@ -56,19 +56,16 @@ final class RemoteUserLoaderTests: XCTestCase {
         }
     }
     
-    func test_loadUsers_deliversInvalidDataOn200WithInvalidJSON() async throws {
+    func test_loadUsers_deliversInvalidDataOn200WithInvalidJSON() async {
         let (sut, spy) = makeSUT()
-        
         spy.stub(statusCode: 200, data: Data("invalid json".utf8))
         
         await assertThat(sut, throws: .invalidData)
     }
     
-    
     func test_loadUsers_deliversNoUsersOn200WithEmptyJSONList() async throws {
         let (sut, spy) = makeSUT()
         let emptyListJSON = makeUsersJSON([])
-        
         spy.stub(statusCode: 200, data: emptyListJSON)
         
         let receivedUsers = try await sut.loadUsers()
@@ -89,8 +86,9 @@ final class RemoteUserLoaderTests: XCTestCase {
         let receivedUsers = try await sut.loadUsers()
         XCTAssertEqual(receivedUsers, expectedUsers)
     }
+
+    // MARK: - Helpers
     
-    // MARK: HELPERS
     private func makeSUT(
         baseURL: URL = anyURL(),
         file: StaticString = #filePath,
@@ -130,7 +128,6 @@ final class RemoteUserLoaderTests: XCTestCase {
             "username": username,
             "email": email
         ]
-        
         return (model, json)
     }
     
@@ -139,31 +136,11 @@ final class RemoteUserLoaderTests: XCTestCase {
         return try! JSONSerialization.data(withJSONObject: json)
     }
     
-    
     private class HTTPClientSpy: HTTPClient {
-        struct ReceivedMessages: Equatable {
-            let url: URL
-            let method: String
-        }
+        private(set) var requestedURLs = [URL]()
+        private var stub: Result<(Data, HTTPURLResponse), Error>?
         
-        private(set) var receivedMessages = [ReceivedMessages]()
-        private var stub: HTTPClient.Result?
-        
-        var requestedURLs: [URL] {
-            receivedMessages.map(\.url)
-        }
-        
-        func get(from url: URL, completion: @escaping (HTTPClient.Result) -> Void) -> any HTTPClientTask {
-            receivedMessages.append(ReceivedMessages(url: url, method: "GET"))
-            
-            if let stub = stub {
-                completion(stub)
-            }
-            
-            return Task()
-        }
-        
-        func stub(with result: HTTPClient.Result) {
+        func stub(with result: Result<(Data, HTTPURLResponse), Error>) {
             self.stub = result
         }
         
@@ -172,8 +149,9 @@ final class RemoteUserLoaderTests: XCTestCase {
             self.stub = .success((data, response))
         }
         
-        private struct Task: HTTPClientTask {
-            func cancel() {}
+        func get(from url: URL) async throws -> (Data, HTTPURLResponse) {
+            requestedURLs.append(url)
+            return try stub?.get() ?? (Data(), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }
     }
 }
