@@ -17,91 +17,99 @@ final class RemoteUserLoaderTests: XCTestCase {
         XCTAssertTrue(client.receivedMessages.isEmpty)
     }
     
-    func test_loadUsers_requestDataFromURL() {
+    func test_loadUsers_requestDataFromURL() async {
         let url = anyURL()
         let (sut, spy) = makeSUT(baseURL: url)
+        spy.stub(with: .failure(anyNSError()))
         
-        sut.loadUsers { _ in }
+        _ = try? await sut.loadUsers()
         
         XCTAssertEqual(spy.requestedURLs, [url])
     }
     
-    func test_loadUsers_requestDataFromURLTwice() {
+    func test_loadUsers_requestDataFromURLTwice() async {
         let url = anyURL()
         let (sut, spy) = makeSUT(baseURL: url)
+        spy.stub(with: .failure(anyNSError()))
         
-        sut.loadUsers { _ in }
-        sut.loadUsers { _ in }
+        _ = try? await sut.loadUsers()
+        _ = try? await sut.loadUsers()
         
         XCTAssertEqual(spy.requestedURLs, [url, url])
     }
     
-    func test_loadUsers_deliversConnectivityErrorOnClientError() {
+    func test_loadUsers_deliversConnectivityErrorOnClientError() async {
         let (sut, spy) = makeSUT()
-        let clientError = anyNSError()
+        spy.stub(with: .failure(anyNSError()))
         
-        expect(sut, toCompleteWith: failure(.connectivity), when: {
-            spy.complete(with: clientError)
-        })
-    }
-    
-    func test_loadUsers_deliversInvalidDataOnNon200Status() {
-        let samples = [199, 201, 300, 400, 500]
-        
-        samples.forEach { code in
-            let (sut, spy) = makeSUT()
-            expect(sut, toCompleteWith: failure(.invalidData), when: {
-                spy.complete(withStatusCode: code, data: anyData())
-            })
+        do {
+            _ = try await sut.loadUsers()
+            XCTFail("Expected failure, got success instead")
+        } catch let error as RemoteUserLoader.Error {
+            XCTAssertEqual(error, .connectivity)
+        } catch {
+            XCTFail("Expected RemoteUserLoader.Error, got \(error)")
         }
     }
     
-    func test_loadUsers_deliversInvalidDataOn200WithInvalidJSON() {
+    func test_loadUsers_deliversInvalidDataOnNon200Status() async {
+        let samples = [199, 201, 300, 400, 500]
+        
+        for code in samples {
+            let (sut, spy) = makeSUT()
+            spy.stub(statusCode: code, data: anyData())
+            
+            do {
+                _ = try await sut.loadUsers()
+                XCTFail("Expected failure for status \(code)")
+            } catch let error as RemoteUserLoader.Error {
+                XCTAssertEqual(error, .invalidData)
+            } catch {
+                XCTFail("Expected RemoteUserLoader.Error, got \(error)")
+            }
+        }
+    }
+    
+    func test_loadUsers_deliversInvalidDataOn200WithInvalidJSON() async throws {
         let (sut, spy) = makeSUT()
         
-        expect(sut, toCompleteWith: failure(.invalidData), when: {
-            spy.complete(withStatusCode: 200, data: Data("invalid json".utf8))
-        })
+        spy.stub(statusCode: 200, data: Data("invalid json".utf8))
+        
+        do {
+            _ = try await sut.loadUsers()
+            XCTFail("Expected invalidData error, got success instead")
+        } catch let error as RemoteUserLoader.Error {
+            XCTAssertEqual(error, .invalidData)
+        } catch {
+            XCTFail("Expected RemoteUserLoader.Error, got \(error) instead")
+        }
     }
     
     
-    func test_loadUsers_deliversNoUsersOn200WithEmptyJSONList() {
-        let (sut, client) = makeSUT()
+    func test_loadUsers_deliversNoUsersOn200WithEmptyJSONList() async throws {
+        let (sut, spy) = makeSUT()
         let emptyListJSON = makeUsersJSON([])
         
-        expect(sut, toCompleteWith: .success([]), when: {
-            client.complete(withStatusCode: 200, data: emptyListJSON)
-        })
+        spy.stub(statusCode: 200, data: emptyListJSON)
+        
+        let receivedUsers = try await sut.loadUsers()
+        
+        XCTAssertEqual(receivedUsers, [])
     }
     
-    func test_loadUsers_deliversUsersOn200WithValidJSON() {
-        let (sut, client) = makeSUT()
+    func test_loadUsers_deliversUsersOn200WithValidJSON() async throws {
+        let (sut, spy) = makeSUT()
         
         let user1 = makeUser(id: 1, username: "emilys", email: "emily@dummyjson.com")
         let user2 = makeUser(id: 2, username: "john_doe", email: "john@dummyjson.com")
-        
         let expectedUsers = [user1.model, user2.model]
         let jsonData = makeUsersJSON([user1.json, user2.json])
         
-        expect(sut, toCompleteWith: .success(expectedUsers), when: {
-            client.complete(withStatusCode: 200, data: jsonData)
-        })
+        spy.stub(statusCode: 200, data: jsonData)
+        
+        let receivedUsers = try await sut.loadUsers()
+        XCTAssertEqual(receivedUsers, expectedUsers)
     }
-    
-    func test_loadUsers_doesNotDeliversResultAfterSUTDeallocated() {
-        let client = HTTPClientSpy()
-        var sut: RemoteUserLoader? = RemoteUserLoader(url: anyURL(), client: client)
-        
-        var receivedResults = [RemoteUserLoader.Result]()
-        
-        sut?.loadUsers { receivedResults.append($0) }
-        
-        sut = nil
-        client.complete(withStatusCode: 200, data: Data("invalid json".utf8))
-        
-        XCTAssertTrue(receivedResults.isEmpty)
-    }
-    
     
     // MARK: HELPERS
     private func makeSUT(
@@ -136,80 +144,41 @@ final class RemoteUserLoaderTests: XCTestCase {
         return try! JSONSerialization.data(withJSONObject: json)
     }
     
-    private func failure(_ error: RemoteUserLoader.Error) -> RemoteUserLoader.Result {
-        .failure(error)
-    }
-    
-    private func expect(
-        _ sut: RemoteUserLoader,
-        toCompleteWith expectedResult: RemoteUserLoader.Result,
-        when action: () -> Void,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        let exp = expectation(description: "Wait for load completion")
-        
-        sut.loadUsers { receivedResult in
-            switch (receivedResult, expectedResult) {
-                case let (.success(received), .success(expected)):
-                    XCTAssertEqual(received, expected, file: file, line: line)
-                case let (.failure(received as RemoteUserLoader.Error), .failure(expected as RemoteUserLoader.Error)):
-                    XCTAssertEqual(received, expected, file: file, line: line)
-                default:
-                    XCTFail("Expected \(expectedResult) got \(receivedResult)", file: file, line: line)
-            }
-            exp.fulfill()
-        }
-        
-        action()
-        wait(for: [exp], timeout: 1.0)
-    }
     
     private class HTTPClientSpy: HTTPClient {
-        
         struct ReceivedMessages: Equatable {
             let url: URL
             let method: String
         }
         
         private(set) var receivedMessages = [ReceivedMessages]()
-        private var completions = [(url: URL, completion: (HTTPClient.Result) -> Void)]()
-        private(set) var cancelledURLs = [URL]()
+        private var stub: HTTPClient.Result?
         
         var requestedURLs: [URL] {
             receivedMessages.map(\.url)
         }
         
-        func get(from url: URL, completion: @escaping (HTTPClient.Result) -> Void) -> any DummyJsonFramework.HTTPClientTask {
-            receivedMessages.append(ReceivedMessages(url: url, method: ""))
-            completions.append((url, completion))
-            return Task(onCancel: { [weak self] in self?.cancelledURLs.append(url) })
+        func get(from url: URL, completion: @escaping (HTTPClient.Result) -> Void) -> any HTTPClientTask {
+            receivedMessages.append(ReceivedMessages(url: url, method: "GET"))
+            
+            if let stub = stub {
+                completion(stub)
+            }
+            
+            return Task()
         }
         
-        func complete(with error: Error, at index: Int = 0) {
-            completions[index].completion(.failure(error))
+        func stub(with result: HTTPClient.Result) {
+            self.stub = result
         }
         
-        func complete(
-            withStatusCode code: Int,
-            data: Data,
-            at index: Int = 0
-        ) {
-            let response = HTTPURLResponse(
-                url: completions[index].url,
-                statusCode: code,
-                httpVersion: nil,
-                headerFields: nil)!
-            completions[index].completion(.success((data, response)))
+        func stub(statusCode: Int, data: Data) {
+            let response = HTTPURLResponse(url: anyURL(), statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+            self.stub = .success((data, response))
         }
         
         private struct Task: HTTPClientTask {
-            let onCancel: () -> Void
-            
-            func cancel() {
-                onCancel()
-            }
+            func cancel() {}
         }
-        
     }
 }
