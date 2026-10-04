@@ -6,12 +6,20 @@
 //
 
 import SwiftUI
+import DummyJsonFramework
+import DummyJsonPresentation
 
 @main
 struct DummyJsonApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            let client = URLSessionHTTPClient()
+            let url = URL(string: "https://dummyjson.com/users")!
+            let loader = RemoteUserLoader(url: url, client: client)
+            let viewModel = UserViewModel(loader: loader)
+            ContentView(viewModel: viewModel)
+                .preferredColorScheme(.dark)
         }
+        
     }
 }
