@@ -26,16 +26,17 @@ final class RemoteUserLoader {
         
     }
     
-    private let baseURL: URL
+    private let url: URL
     private let client: HTTPClient
     
-    public init(baseURL: URL, client: HTTPClient) {
-        self.baseURL = baseURL
+    public init(url: URL, client: HTTPClient) {
+        self.url = url
         self.client = client
     }
     
     func loadUsers(completion: @escaping (UserLoader.Result) -> Void) {
-        client.get(from: baseURL) { result in
+        client.get(from: url) { [weak self] result in
+            guard self != nil else { return }
             switch result {
                 case let .success((data, response)):
                     switch response.statusCode {
@@ -50,7 +51,7 @@ final class RemoteUserLoader {
                 case .failure:
                     completion(.failure(Error.connectivity))
             }
-           
+            
         }
     }
     
@@ -58,7 +59,7 @@ final class RemoteUserLoader {
         let id: Int
         let username: String
         let email: String
-
+        
         func toModel() -> UserModel {
             UserModel(id: id, username: username, email: email)
         }
@@ -67,7 +68,7 @@ final class RemoteUserLoader {
     private struct RemoteUserRootDTO: Decodable {
         let users: [RemoteUserDTO]
     }
-
+    
 }
 
 
@@ -136,7 +137,7 @@ final class RemoteUserLoaderTests: XCTestCase {
         })
     }
     
-    func test_load_deliversUsersOn200WithValidJSON() {
+    func test_loadUsers_deliversUsersOn200WithValidJSON() {
         let (sut, client) = makeSUT()
         
         let user1 = makeUser(id: 1, username: "emilys", email: "emily@dummyjson.com")
@@ -150,6 +151,19 @@ final class RemoteUserLoaderTests: XCTestCase {
         })
     }
     
+    func test_loadUsers_doesNotDeliversResultAfterSUTDeallocated() {
+        let client = HTTPClientSpy()
+        var sut: RemoteUserLoader? = RemoteUserLoader(url: anyURL(), client: client)
+        
+        var receivedResults = [UserLoader.Result]()
+        
+        sut?.loadUsers { receivedResults.append($0) }
+        
+        sut = nil
+        client.complete(withStatusCode: 200, data: Data("invalid json".utf8))
+        
+        XCTAssertTrue(receivedResults.isEmpty)
+    }
     
     
     // MARK: HELPERS
@@ -159,12 +173,11 @@ final class RemoteUserLoaderTests: XCTestCase {
         line: UInt = #line
     ) -> (sut: RemoteUserLoader, spy: HTTPClientSpy) {
         let spy = HTTPClientSpy()
-        let sut = RemoteUserLoader(baseURL: baseURL, client: spy)
+        let sut = RemoteUserLoader(url: baseURL, client: spy)
         trackForMemoryLeaks(sut, file: file, line: line)
         trackForMemoryLeaks(spy, file: file, line: line)
         return (sut, spy)
     }
-    
     
     private func makeUser(
         id: Int,
