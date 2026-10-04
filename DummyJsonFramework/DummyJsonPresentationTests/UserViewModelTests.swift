@@ -24,8 +24,8 @@ final class UserViewModel {
     public func load() {
         isLoading = true
         
-        loader.loadUsers { _ in
-            
+        loader.loadUsers { [weak self]_ in
+            self?.isLoading = false
         }
     }
 }
@@ -58,6 +58,22 @@ final class UserViewModelTests : XCTestCase {
         
         sut.load()
         XCTAssertEqual(spy.loadCallCount, 2)
+    }
+    
+    func test_load_updatesLoadingStateCorrectly() {
+        let (sut, spy) = makeSUT()
+        
+        sut.load()
+        XCTAssertTrue(sut.isLoading)
+        
+        spy.complete(at: 0)
+        XCTAssertFalse(sut.isLoading)
+        
+        sut.load()
+        XCTAssertTrue(sut.isLoading)
+
+        spy.complete(withError: anyNSError(), at: 1)
+        XCTAssertFalse(sut.isLoading)
     }
     
     // MARK: - Helpers
