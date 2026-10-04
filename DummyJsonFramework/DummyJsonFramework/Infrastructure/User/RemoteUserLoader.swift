@@ -7,7 +7,7 @@
 
 import Foundation
 
-public final class RemoteUserLoader {
+public final class RemoteUserLoader: UserLoader {
     
     public enum Error: Swift.Error, LocalizedError, Equatable {
         case connectivity
