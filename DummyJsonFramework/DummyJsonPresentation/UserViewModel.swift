@@ -9,7 +9,8 @@ import DummyJsonFramework
 import Foundation
 import Combine
 
-public final class UserViewModel {
+@MainActor
+public final class UserViewModel: ObservableObject {
     
     @Published public private(set) var users: [UserModel] = []
     @Published public private(set) var isLoading: Bool = false
@@ -21,19 +22,16 @@ public final class UserViewModel {
         self.loader = loader
     }
     
-    public func load() {
+    public func load() async {
         isLoading = true
+        errorMessage = nil
         
-        loader.loadUsers { [weak self] result in
-            guard let self = self else { return }
-            self.isLoading = false
-            
-            switch result {
-                case .success(let users):
-                    self.users = users
-                case .failure(let error):
-                    self.errorMessage = error.localizedDescription
-            }
+        do {
+            users = try await loader.loadUsers()
+        } catch {
+            errorMessage = error.localizedDescription
         }
+        
+        isLoading = false
     }
 }
