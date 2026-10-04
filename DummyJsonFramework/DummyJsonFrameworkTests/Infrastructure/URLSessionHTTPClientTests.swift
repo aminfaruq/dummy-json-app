@@ -117,6 +117,32 @@ final class URLSessionHTTPClientTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
     }
     
+    func test_getFromURL_deliversDataAndResponseOnSuccess() {
+        let expectedData = anyData()
+        let expectedResponse = makeHTTPURLResponse(statusCode: 200)
+        let exp = expectation(description: "Wait for success")
+        
+        URLProtocolStub.stub { _ in
+                .success(data: expectedData, response: expectedResponse)
+        }
+        
+        makeSUT().get(from: anyURL()) { result in
+            switch result {
+                case let .success((data, response)):
+                    XCTAssertEqual(data, expectedData)
+                    XCTAssertEqual(response.statusCode, expectedResponse.statusCode)
+                    XCTAssertEqual(response.url, expectedResponse.url)
+                case let .failure(error):
+                    XCTFail("Expected failute, got \(error)")
+            }
+            
+            exp.fulfill()
+            
+        }
+        
+        wait(for: [exp], timeout: 1.0)
+    }
+    
     // MARK: - Helpers
     
     private func makeSUT(file: StaticString = #filePath, line: UInt = #line) -> URLSessionHTTPClient {
@@ -127,6 +153,10 @@ final class URLSessionHTTPClientTests: XCTestCase {
         let sut = URLSessionHTTPClient(session: session)
         trackForMemoryLeaks(sut, file: file, line: line)
         return sut
+    }
+    
+    private func makeHTTPURLResponse(statusCode: Int, url: URL = anyURL()) -> HTTPURLResponse {
+        HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
     }
     
     private final class URLProtocolStub: URLProtocol {
