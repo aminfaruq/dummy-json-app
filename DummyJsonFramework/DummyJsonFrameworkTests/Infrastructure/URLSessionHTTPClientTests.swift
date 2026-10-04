@@ -143,6 +143,83 @@ final class URLSessionHTTPClientTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
     }
     
+    
+    func test_getFromURL_deliversFailureOnNilDataAndNilResponse() {
+        let exp = expectation(description: "Wait for nil data + nil response")
+        
+        URLProtocolStub.stub { _ in
+                .success(data: nil, response: nil)
+        }
+        
+        makeSUT().get(from: anyURL()) { result in
+            switch result {
+            case .success:
+                XCTFail("Expected failure")
+            case let .failure(error):
+                XCTAssertTrue(error is URLSessionHTTPClient.UnexpectedValuesRepresentation)
+            }
+            exp.fulfill()
+        }
+        
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    func test_getFromURL_deliversFailureOnNonHTTPResponse() {
+        let exp = expectation(description: "Wait for non-HTTP response")
+        let nonHTTPResponse = URLResponse(url: anyURL(), mimeType: nil, expectedContentLength: 0, textEncodingName: nil)
+        
+        URLProtocolStub.stub { _ in
+                .success(data: anyData(), response: nonHTTPResponse)
+        }
+        
+        makeSUT().get(from: anyURL()) { result in
+            switch result {
+            case .success:
+                XCTFail("Expected failure")
+            case let .failure(error):
+                XCTAssertTrue(error is URLSessionHTTPClient.UnexpectedValuesRepresentation)
+            }
+            exp.fulfill()
+        }
+        
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    func test_getFromURL_deliversFailureOnNonNilDataNilResponse() {
+        let exp = expectation(description: "Wait for non-nil data + nil response")
+        
+        URLProtocolStub.stub { _ in
+                .success(data: anyData(), response: nil)
+        }
+        
+        makeSUT().get(from: anyURL()) { result in
+            switch result {
+            case .success:
+                XCTFail("Expected failure")
+            case let .failure(error):
+                XCTAssertTrue(error is URLSessionHTTPClient.UnexpectedValuesRepresentation)
+            }
+            exp.fulfill()
+        }
+        
+        wait(for: [exp], timeout: 1.0)
+    }
+    
+    func test_getFromURL_returnsCancellableTask() {
+        let exp = expectation(description: "Wait for request to be observed")
+
+        URLProtocolStub.observe { request in
+            exp.fulfill()
+        }
+
+        let sut = makeSUT()
+        let task = sut.get(from: anyURL()) { _ in }
+
+        XCTAssertNotNil(task)
+        wait(for: [exp], timeout: 1.0)
+        task.cancel()
+    }
+    
     // MARK: - Helpers
     
     private func makeSUT(file: StaticString = #filePath, line: UInt = #line) -> URLSessionHTTPClient {
